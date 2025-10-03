@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Smart Study Planner</title>
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --accent:#7c5cff; --muted:#98a0b3; --success:#22c55e;
+      --glass: rgba(255,255,255,0.03);
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+    }
+    *{box-sizing:border-box}
+    body{margin:0; background:linear-gradient(180deg,#071023 0%,#071827 60%); color:#e6eef8;}
+    .app{max-width:1100px;margin:28px auto;padding:22px}
+    header{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+    h1{margin:0;font-size:20px}
+    .controls{margin-left:auto;display:flex;gap:8px}
+    .btn{background:var(--accent);border:none;padding:8px 12px;border-radius:10px;color:white;cursor:pointer}
+    .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06)}
+    .layout{display:grid;grid-template-columns:360px 1fr;gap:18px}
+
+    /* Left column */
+    .panel{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:16px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+    label{display:block;font-size:12px;color:var(--muted);margin-top:10px}
+    input[type=text], input[type=date], input[type=time], textarea, select, input[type=datetime-local]{
+      width:100%; padding:10px;margin-top:6px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit
+    }
+    textarea{min-height:80px;resize:vertical}
+
+    .task-list{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+    .task{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;background:var(--glass);border:1px solid rgba(255,255,255,0.02)}
+    .task h3{margin:0;font-size:14px}
+    .meta{font-size:12px;color:var(--muted)}
+    .task-actions{margin-left:auto;display:flex;gap:6px}
+
+    /* Right column */
+    .main{display:flex;flex-direction:column;gap:12px}
+    .summary{display:flex;gap:12px}
+    .stat{flex:1;padding:12px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));}
+    .stat h2{margin:0;font-size:20px}
+    .timeline-card{padding:12px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));}
+
+    .timeline{position:relative; overflow:auto;border-radius:8px;padding:12px;border:1px dashed rgba(255,255,255,0.03);min-height:160px;background:linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));}
+    .time-row{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+    .time-cell{font-size:12px;color:var(--muted);min-width:80px;text-align:center}
+    .bar{position:absolute;height:28px;border-radius:8px;padding:6px 10px;color:#061025;display:flex;align-items:center;gap:8px}
+    .bar .dot{width:10px;height:10px;border-radius:50%;background:rgba(0,0,0,0.2)}
+
+    footer{margin-top:18px;text-align:center;color:var(--muted);font-size:13px}
+
+    /* small screens */
+    @media (max-width:900px){.layout{grid-template-columns:1fr;}.controls{display:none}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Smart Study Planner</h1>
+      <div class="controls">
+        <button class="btn" id="notify-perm">Enable Notifications</button>
+        <button class="btn ghost" id="export">Export JSON</button>
+        <button class="btn ghost" id="import">Import JSON</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <div class="panel">
+        <h2 style="margin:0">Add / Edit Task</h2>
+        <form id="task-form">
+          <input type="hidden" id="task-id" />
+          <label>Title<input type="text" id="title" required placeholder="Study Chapter 4"/></label>
+          <label>Description<textarea id="description" placeholder="Notes, topics, links..."></textarea></label>
+          <label>Start Date<input type="date" id="start_date" required></label>
+          <label>End Date<input type="date" id="end_date" required></label>
+          <label>Reminder (date & time)<input type="datetime-local" id="reminder"></label>
+          <label>Priority<select id="priority"><option>Low</option><option selected>Medium</option><option>High</option></select></label>
+          <label>Status<select id="status"><option>Planned</option><option>In Progress</option><option>Completed</option></select></label>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn" type="submit">Save Task</button>
+            <button class="btn ghost" id="clear">Clear</button>
+          </div>
+        </form>
+
+        <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">Tasks</h3>
+          <small class="meta">Click a task to edit</small>
+        </div>
+
+        <div class="task-list" id="task-list">
+          <!-- tasks injected here -->
+        </div>
+      </div>
+
+      <div class="main">
+        <div class="summary">
+          <div class="stat">
+            <h2 id="total">0</h2>
+            <div class="meta">Total tasks</div>
+          </div>
+          <div class="stat">
+            <h2 id="inprogress">0</h2>
+            <div class="meta">In Progress</div>
+          </div>
+          <div class="stat">
+            <h2 id="completed">0</h2>
+            <div class="meta">Completed</div>
+          </div>
+        </div>
+
+        <div class="timeline-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <h3 style="margin:0">Visual Timeline</h3>
+            <div class="meta">Drag timeline horizontally to explore</div>
+          </div>
+          <div class="timeline" id="timeline"></div>
+        </div>
+
+        <footer>Data saved locally in your browser. Use export/import to backup.</footer>
+      </div>
+    </div>
+
+    
+    
+    
+    
+<div>
+  <button id="export" class="btn">Export JSON</button>
+  <button id="import" class="btn">Import JSON</button>
+  <input type="file" id="file-input" accept="application/json" style="display:none">
+</div>
+
+  </div>
+
+  <input type="file" id="file-input" accept="application/json" style="display:none" />
+
+  <script>
+    // Storage key
+    const STORAGE_KEY = 'smartStudy.tasks.v1';
+
+    // util
+    const $ = sel => document.querySelector(sel);
+    const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+    // DOM
+    const form = $('#task-form');
+    const taskList = $('#task-list');
+    const timeline = $('#timeline');
+    const totalEl = $('#total');
+    const inprogressEl = $('#inprogress');
+    const completedEl = $('#completed');
+
+    const notifyBtn = $('#notify-perm');
+    const exportBtn = $('#export');
+    const importBtn = $('#import');
+    const fileInput = $('#file-input');
+    const clearBtn = $('#clear');
+
+    let tasks = loadTasks();
+
+    // -- save/load --
+    function saveTasks(){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+      renderAll();
+    }
+    function loadTasks(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+      }catch(e){console.error(e); return []}
+    }
+
+    // -- helpers --
+    function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+    function parseDate(d){return new Date(d+'T00:00:00')}
+
+    // -- form submit --
+    form.addEventListener('submit', e=>{
+      e.preventDefault();
+      const id = $('#task-id').value;
+      const title = $('#title').value.trim();
+      const description = $('#description').value.trim();
+      const start_date = $('#start_date').value;
+      const end_date = $('#end_date').value;
+      const reminder = $('#reminder').value || null;
+      const priority = $('#priority').value;
+      const status = $('#status').value;
+
+      if(!title || !start_date || !end_date){alert('Please provide title and dates.'); return}
+      if(new Date(end_date) < new Date(start_date)){alert('End date must be on/after start date.');return}
+
+      if(id){
+        // edit
+        const t = tasks.find(x=>x.id===id);
+        if(t){Object.assign(t,{title,description,start_date,end_date,reminder,priority,status,updated:Date.now()})}
+      } else {
+        const t = {id:uid(),title,description,start_date,end_date,reminder,priority,status,created:Date.now()}
+        tasks.push(t);
+      }
+
+      saveTasks();
+      form.reset(); $('#task-id').value='';
+    })
+
+    // clear form
+    clearBtn.addEventListener('click', e=>{e.preventDefault(); form.reset(); $('#task-id').value='';})
+
+    // render list
+    function renderList(){
+      taskList.innerHTML='';
+      const sorted = tasks.slice().sort((a,b)=> new Date(a.start_date)-new Date(b.start_date));
+      for(const t of sorted){
+        const el = document.createElement('div'); el.className='task';
+        el.innerHTML = `<div style="width:10px;height:10px;border-radius:50%;background:${colorForPriority(t.priority)}"></div>
+                        <div>
+                          <h3>${escapeHtml(t.title)}</h3>
+                          <div class="meta">${t.start_date} → ${t.end_date} • ${t.priority} • ${t.status}</div>
+                        </div>
+                        <div class="task-actions">
+                          <button class="btn ghost" data-edit="${t.id}">Edit</button>
+                          <button class="btn ghost" data-toggle="${t.id}">${t.status==='Completed' ? 'Undo' : 'Done'}</button>
+                          <button class="btn ghost" data-del="${t.id}">Delete</button>
+                        </div>`;
+        // click to edit
+        el.querySelector('[data-edit]')?.addEventListener('click', ()=> loadIntoForm(t.id));
+        el.querySelector('[data-toggle]')?.addEventListener('click', ()=> toggleComplete(t.id));
+        el.querySelector('[data-del]')?.addEventListener('click', ()=> deleteTask(t.id));
+        taskList.appendChild(el);
+      }
+    }
+
+    function colorForPriority(p){ if(p==='High') return '#ffb4b4'; if(p==='Medium') return '#ffd8a8'; return '#bde5b8'}
+
+    function escapeHtml(s){return s.replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[c])}
+
+    function loadIntoForm(id){
+      const t = tasks.find(x=>x.id===id); if(!t) return;
+      $('#task-id').value = t.id;
+      $('#title').value = t.title;
+      $('#description').value = t.description || '';
+      $('#start_date').value = t.start_date;
+      $('#end_date').value = t.end_date;
+      $('#reminder').value = t.reminder || '';
+      $('#priority').value = t.priority || 'Medium';
+      $('#status').value = t.status || 'Planned';
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+
+    function toggleComplete(id){
+      const t = tasks.find(x=>x.id===id); if(!t) return;
+      t.status = t.status==='Completed' ? 'Planned' : 'Completed';
+      saveTasks();
+    }
+    function deleteTask(id){ if(!confirm('Delete this task?')) return; tasks = tasks.filter(x=>x.id!==id); saveTasks(); }
+
+    // -- timeline --
+    function renderTimeline(){
+      timeline.innerHTML='';
+      if(tasks.length===0){timeline.innerHTML='<div class="meta">No tasks yet — add one to see the timeline</div>';return}
+      // compute date range
+      const minDate = new Date(Math.min(...tasks.map(t=>new Date(t.start_date))));
+      const maxDate = new Date(Math.max(...tasks.map(t=>new Date(t.end_date))));
+      // add padding
+      minDate.setDate(minDate.getDate()-2);
+      maxDate.setDate(maxDate.getDate()+2);
+
+      const days = Math.max(7, Math.ceil((maxDate-minDate)/(1000*60*60*24)));
+      const pxPerDay = 24; // width scale
+      const totalWidth = days * pxPerDay;
+
+      // draw time header
+      const header = document.createElement('div'); header.className='time-row';
+      for(let i=0;i<days;i++){
+        const d = new Date(minDate); d.setDate(minDate.getDate()+i);
+        const cell = document.createElement('div'); cell.className='time-cell'; cell.style.minWidth = pxPerDay+'px';
+        cell.textContent = d.toISOString().slice(0,10);
+        header.appendChild(cell);
+      }
+      timeline.appendChild(header);
+
+      // container for bars
+      const container = document.createElement('div'); container.style.position='relative'; container.style.width=totalWidth+'px'; container.style.minHeight='120px';
+      // create bar per task stacked vertically
+      const sorted = tasks.slice().sort((a,b)=> new Date(a.start_date)-new Date(b.start_date));
+      for(let i=0;i<sorted.length;i++){
+        const t = sorted[i];
+        const sIdx = Math.round((new Date(t.start_date)-minDate)/(1000*60*60*24));
+        const eIdx = Math.round((new Date(t.end_date)-minDate)/(1000*60*60*24));
+        const left = sIdx * pxPerDay;
+        const width = Math.max(8, (eIdx - sIdx + 1) * pxPerDay);
+        const bar = document.createElement('div'); bar.className='bar';
+        bar.style.left = left+'px'; bar.style.top = (i*38)+'px'; bar.style.width = width+'px';
+        bar.style.background = `linear-gradient(90deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7))`;
+        bar.style.color = '#061025';
+        bar.style.border = '1px solid rgba(0,0,0,0.08)';
+        bar.innerHTML = `<div style="font-weight:600">${escapeHtml(t.title)}</div><div style="font-size:12px;margin-left:auto">${t.start_date} → ${t.end_date}</div>`;
+        // tooltip on hover
+        bar.title = (t.description||'') + '\nPriority: '+t.priority+'\nStatus: '+t.status;
+        container.appendChild(bar);
+      }
+      timeline.appendChild(container);
+
+      // make timeline horizontally scrollable if overflow
+      timeline.scrollLeft = 0;
+    }
+
+    // -- summary --
+    function renderSummary(){
+      totalEl.textContent = tasks.length;
+      inprogressEl.textContent = tasks.filter(t=>t.status==='In Progress').length;
+      completedEl.textContent = tasks.filter(t=>t.status==='Completed').length;
+    }
+
+    function renderAll(){ renderList(); renderTimeline(); renderSummary(); }
+
+    renderAll();
+
+    // -- reminders --
+    // Check reminders every 30s and notify if within the next minute and not already notified
+    function checkReminders(){
+      const now = Date.now();
+      for(const t of tasks){
+        if(!t.reminder) continue;
+        if(t._notified) continue; // temp flag
+        const r = new Date(t.reminder).getTime();
+        if(!isFinite(r)) continue;
+        if(r <= now + 60*1000 && r >= now - 60*1000){
+          notifyUser('Reminder: '+t.title, t.description || `${t.start_date} → ${t.end_date}`);
+          t._notified = true; // won't persist across reloads
+        }
+      }
+    }
+    setInterval(checkReminders, 30*1000);
+
+    function notifyUser(title, body){
+      // in-page visual fallback
+      if(document.hidden){
+        if(window.Notification && Notification.permission==='granted'){
+          new Notification(title,{body});
+        } else {
+          alert(title + '\n' + body);
+        }
+      } else {
+        // small in-page toast
+        const toast = document.createElement('div');
+        toast.style.position='fixed';toast.style.right='18px';toast.style.bottom='18px';toast.style.padding='12px 16px';toast.style.background='var(--accent)';toast.style.borderRadius='10px';toast.style.boxShadow='0 8px 20px rgba(0,0,0,0.4)';
+        toast.style.color='#041227';toast.style.fontWeight=600;toast.textContent = title;
+        document.body.appendChild(toast);
+        setTimeout(()=>toast.remove(),5000);
+      }
+    }
+
+    notifyBtn.addEventListener('click', async ()=>{
+      if(!('Notification' in window)){alert('Notifications not supported in this browser.'); return}
+      const p = await Notification.requestPermission();
+      if(p==='granted') alert('Notifications enabled.'); else alert('Notifications blocked or dismissed.');
+    })
+
+    // -- export / import --
+    exportBtn.addEventListener('click', ()=>{
+      const blob = new Blob([JSON.stringify(tasks, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'smart-study-tasks.json'; a.click(); URL.revokeObjectURL(url);
+    })
+
+    importBtn.addEventListener('click', ()=> fileInput.click());
+    fileInput.addEventListener('change', e=>{
+      const f = e.target.files[0]; if(!f) return; const reader = new FileReader();
+      reader.onload = function(){
+        try{ const imported = JSON.parse(reader.result); if(!Array.isArray(imported)) throw new Error('Invalid format');
+          // basic validation: each item should have id,title,start_date,end_date
+          const ok = imported.every(x=>x.id && x.title && x.start_date && x.end_date);
+          if(!ok) throw new Error('Missing required fields');
+          tasks = imported; saveTasks(); alert('Imported '+tasks.length+' tasks.');
+        }catch(err){alert('Import failed: '+err.message)}
+      }
+      reader.readAsText(f);
+    })
+
+    // keyboard shortcuts: N to focus title
+    window.addEventListener('keydown', e=>{
+      if(e.key==='n' || e.key==='N'){ e.preventDefault(); $('#title').focus(); }
+    })
+
+    // persist _notified flags when rendering new tasks (not stored)
+    window.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkReminders(); });
+
+    // small autosave when unloading
+    window.addEventListener('beforeunload', ()=>{ localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); });
+
+    // === Export Tasks to JSON ===
+document.getElementById('export').addEventListener('click', () => {
+  const tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+  const blob = new Blob([JSON.stringify(tasks, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "tasks_backup.json";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// === Import Tasks from JSON ===
+document.getElementById('import').addEventListener('click', () => {
+  document.getElementById('file-input').click();
+});
+
+document.getElementById('file-input').addEventListener('change', function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const importedTasks = JSON.parse(e.target.result);
+
+      if (Array.isArray(importedTasks)) {
+        localStorage.setItem('tasks', JSON.stringify(importedTasks));
+        alert("✅ Tasks imported successfully!");
+        location.reload(); // refresh tasks & timeline
+      } else {
+        alert("❌ Invalid JSON format.");
+      }
+    } catch (err) {
+      alert("❌ Error reading file: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
+  </script>
+</body>
+</html>
